@@ -2,7 +2,7 @@
 
 ## Overview
 
-VBO (Vehicle Bus Observer) files are text-based telemetry data files used in motorsport data acquisition systems. They contain timestamped sensor data from various vehicle systems including GPS, engine parameters, and vehicle dynamics measurements.
+VBO files are text-based telemetry data files produced by Racelogic's VBOX data logging systems. They contain timestamped sensor data from various vehicle systems including GPS, engine parameters, and vehicle dynamics measurements.
 
 **Important**: VBO files are highly variable in structure. Almost all sections are optional except for the core data sections. The parser must be flexible to handle different file variations.
 
@@ -11,7 +11,7 @@ VBO (Vehicle Bus Observer) files are text-based telemetry data files used in mot
 VBO files use a section-based format with square bracket delimited sections `[section name]`. The basic structure is:
 
 ```
-File created on DD/MM/YYYY @ HH:MM:SS
+File created on DD/MM/YYYY at HH:MM:SS
 
 [header]
 channel1
@@ -40,12 +40,14 @@ value1 value2 value3 ...
 ### File Header (Optional)
 The file may start with a creation timestamp:
 ```
-File created on 15/12/2023 @ 14:30:25
+File created on 15/12/2023 at 14:30:25
 ```
 
 **Supported date formats:**
-- `DD/MM/YYYY @ HH:MM:SS`
+- `DD/MM/YYYY at HH:MM:SS`
 - `DD/MM/YYYY`
+
+**Note**: The timestamp uses "at" not "@" as the separator.
 
 ### `[header]` Section (Required)
 Contains the human-readable channel names, one per line:
@@ -60,7 +62,7 @@ heading
 ```
 
 ### `[channel units]` Section (Optional)
-Contains units for each channel, corresponding to the header order:
+Contains units for channels that don't have units in their names:
 ```
 [channel units]
 (null)
@@ -71,79 +73,142 @@ kmh
 deg
 ```
 
-**Note**: Units may be `(null)` or empty for dimensionless values.
+**Important**: Many VBOX channels include units in their names (e.g., "velocity kmh", "vertical velocity m/s"). The `[channel units]` section is primarily used for external/analog input channels. Built-in GPS channels often have units embedded in the channel name itself.
+
+**Note**: Units may be `(null)` or empty for dimensionless values or when units are included in channel names.
 
 ### `[column names]` Section (Optional)
-Contains space-separated machine-readable column names:
+Contains space-separated machine-readable column names (abbreviated versions of header names):
 ```
 [column names]
 sats time lat long velocity heading
 ```
 
-**Important**: If this section is missing, the parser uses the `[header]` channel names as column names.
+**Important**: 
+- If this section is missing, the parser uses the `[header]` channel names as column names
+- Column names are typically abbreviated (e.g., "vertical velocity kmh" → "vertvel")
+- They may remove spaces, units, and use lowercase
 
 ### `[data]` Section (Required)
 Contains the actual telemetry data, one row per sample:
 ```
 [data]
-8 143025.500 4512.3456 -7365.4321 85.2 180.5
-7 143026.000 4512.4456 -7365.5321 82.1 175.2
+8 143025.500 +03119.09973 -00245.67890 85.2 180.5
+7 143026.000 +03119.10973 -00245.68890 82.1 175.2
 ```
 
 ## Optional Sections
+
+### `[comments]` Section
+Contains device and logging metadata:
+```
+[comments]
+Copyright, Racelogic Ltd
+VBOX 3i firmware version 1.00
+GPS Type, u-blox LEA-5H
+Serial Number, VB3i123456
+Logging Rate, 100 Hz
+Software Version, VBOX Tools 2.5.1
+```
+
+**Purpose**: Provides metadata about the logging device, firmware versions, GPS type, serial numbers, logging rates, and software versions.
 
 ### `[laptiming]` Section
 Contains timing line definitions for lap detection:
 ```
 [laptiming]
-Start +Long1 +Lat1 +Long2 +Lat2 ¬ Start/Finish Line
-Split +Long1 +Lat1 +Long2 +Lat2 ¬ Sector 1
+Start -1042.214520 +2921.328310 -1042.214520 +2921.301330 Start/Finish
+Split -1042.281770 +2921.360280 -1042.281770 +2921.333300 Split 1
 ```
 
-### `[circuit details]` Section
-Contains circuit information:
+**Format**: Each line contains:
+- Keyword: `Start` or `Split`
+- Two coordinate pairs (longitude latitude longitude latitude)
+- Optional description at the end
+
+**Note**: No special separators like "¬" are used - just space-separated values.
+
+### `[avi]` Section
+Links video files to the VBO data:
+```
+[avi]
+session_
+MP4
+```
+
+**Purpose**: 
+- First line: video file prefix
+- Second line: file extension
+- Combined with aviFileIndex (e.g., 2) creates filename: `session_0002.MP4`
+- aviSyncTime field provides timestamp within the video
+
+### `[circuit details]` Section (Non-standard)
+Contains circuit information (not present in all VBO files):
 ```
 [circuit details]
 country United States
 circuit Laguna Seca
 ```
 
+**Note**: This section may appear when track metadata is available from track databases or user input. Not a standard Racelogic section.
+
+### `[session data]` Section (Third-party)
+Used by some applications like RaceChrono:
+```
+[session data]
+session Test Session
+driver John Doe
+vehicle BMW M3
+notes Practice run
+```
+
 ## Data Types and Post-Processing
 
 ### Time Format
-Times are stored in `HHMMSS.mmm` format (24-hour with milliseconds):
-- `143025.500` = 14:30:25.500 (2:30:25.500 PM)
-- Parser converts to seconds since midnight: `14*3600 + 30*60 + 25.5 = 51625.5`
+Times are stored in `HHMMSS.ff` format (UTC time-of-day with hundredths of seconds by default):
+- `162235.40` = 16:22:35.40 UTC
+- `143025.500` = 14:30:25.500 UTC (if millisecond precision)
 
-**Post-processing**: The parser normalizes timestamps to be relative to session start (subtracts minimum time).
+**Important**: 
+- Time represents UTC time-of-day (since midnight), not elapsed session time
+- Default resolution is 0.01s (hundredths), but can be higher
+- Parser converts to seconds since midnight: `16*3600 + 22*60 + 35.4 = 58355.4`
+
+**Post-processing**: The parser may normalize timestamps to be relative to session start (subtracts minimum time) for convenience, but this is a parser implementation choice, not inherent to the file format.
 
 ### Coordinate Systems
 The parser automatically detects and converts between coordinate formats:
 
-#### 1. Decimal Degrees (GPS Standard)
+#### 1. Decimal Degrees (Less Common)
 - **Format**: `±DD.DDDDDD`
 - **Example**: `45.123456, -73.654321`
 - **Range**: Latitude ±90°, Longitude ±180°
+- **Usage**: May appear in post-converted files or from non-VBOX sources
 - **Post-processing**: None required
 
-#### 2. NMEA Format (DDMM.MMMMM)
+#### 2. NMEA Format (DDMM.MMMMM) - Most Common
 - **Format**: `DDMM.MMMMM` (degrees + decimal minutes)
-- **Example**: `4512.3456` = 45°12.3456' = 45.205760°
+- **Example**: `+03119.09973` = 03°19.09973' N = 51.9833° N
+- **Usage**: Default format for most VBOX devices
 - **Post-processing**: 
   ```
-  degrees = floor(value / 100)
-  minutes = value % 100
+  degrees = floor(abs(value) / 100)
+  minutes = abs(value) % 100
   decimal = degrees + (minutes / 60)
+  // Preserve original sign
+  result = value < 0 ? -decimal : decimal
   ```
 
 #### 3. VBOX Minutes Format
 - **Format**: Total minutes as decimal
-- **Example**: `2707.2074` = 45.120123°
+- **Example**: `4507.2074` = 45.120123°
 - **Post-processing**: `decimal_degrees = total_minutes / 60`
 
 #### 4. Local Coordinates
-- **Format**: Large values (> 1000) indicating local coordinate system
-- **Post-processing**: No conversion applied
+- **Format**: Large values indicating local Cartesian coordinates (typically in meters)
+- **Detection**: Values that don't fit GPS coordinate patterns and are very large
+- **Caution**: Simple thresholds like ">1000" can misidentify longitudes in minutes format (e.g., 117°W = 11700.x minutes)
+- **Post-processing**: No conversion applied - used as-is for local coordinate systems
 
 ### Numeric Values
 - **Null values**: Represented as `(null)`, `null`, or empty strings
@@ -151,11 +216,14 @@ The parser automatically detects and converts between coordinate formats:
 - **Invalid numbers**: Gracefully handled, converted to default values
 
 ### Video File Association
-Video files follow the naming pattern `{vbo_filename}_NNNN.mp4`:
+Video files follow the naming pattern defined in the `[avi]` section:
 - VBO file: `session_RD.vbo`
-- Video files: `session_RD_0001.mp4`, `session_RD_0002.mp4`, etc.
+- `[avi]` section contains: `session_` and `MP4`
+- Video files: `session_0001.MP4`, `session_0002.MP4`, etc.
 
-The `aviFileIndex` field in data points indicates which video file (1, 2, 3...), and `aviSyncTime` provides the timestamp within that video.
+The `aviFileIndex` field in data points indicates which video file (1, 2, 3...), and `aviSyncTime` (or `aviTime`) provides the timestamp within that video.
+
+**Note**: Some older exports used `aviTime` instead of `aviSyncTime`, but `aviSyncTime` is preferred for compatibility with Circuit Tools.
 
 ## Channel Mappings
 
@@ -168,7 +236,7 @@ The parser supports flexible column name mapping. Common variations:
 | `lat` | latitude | `latitude` |
 | `long` | longitude | `longitude` |
 | `velocity` | velocity | `velocity kmh` |
-| `vert-vel` | verticalVelocity | `vertical velocity m/s` |
+| `vertvel` | verticalVelocity | `vertical velocity m/s`, `vertical velocity kmh` |
 | `Tsample` | samplePeriod | `sampleperiod` |
 | `solution_type` | solutionType | `solution type` |
 | `avifileindex` | aviFileIndex | - |
@@ -178,6 +246,8 @@ The parser supports flexible column name mapping. Common variations:
 
 Based on the parser's default mappings, VBO files may contain these channels:
 
+**Important**: Not all channels appear in every file - they depend on hardware configuration, connected sensors, and input modules. The following is a comprehensive list of supported channels.
+
 ### GPS/Navigation
 - `satellites` - Number of GPS satellites
 - `time` - Timestamp (HHMMSS.mmm format)
@@ -186,9 +256,9 @@ Based on the parser's default mappings, VBO files may contain these channels:
 - `velocity` - GPS velocity (km/h)
 - `heading` - GPS heading (degrees)
 - `height` - GPS altitude
-- `verticalVelocity` - Vertical velocity (m/s)
+- `verticalVelocity` - Vertical velocity (historically km/h in older VBOX devices, m/s in newer ones)
 - `samplePeriod` - Sample period
-- `solutionType` - GPS solution quality
+- `solutionType` - GPS fix status/solution quality
 
 ### Video Synchronization
 - `aviFileIndex` - Video file index (1, 2, 3...)
@@ -245,7 +315,7 @@ longitude
 
 ### Complete VBO File
 ```
-File created on 15/12/2023 @ 14:30:25
+File created on 31/07/2006 at 09:55:20
 
 [header]
 satellites
@@ -272,13 +342,24 @@ rpm
 [column names]
 sats time lat long velocity heading height Engine_Speed Gear
 
+[comments]
+Copyright, Racelogic Ltd
+VBOX 3i firmware version 1.00
+GPS Type, u-blox LEA-5H
+Serial Number, VB3i123456
+Logging Rate, 100 Hz
+
 [data]
 8 143025.500 4512.3456 -7365.4321 85.2 180.5 100.5 3000 3
 7 143026.000 4512.4456 -7365.5321 82.1 175.2 100.3 2950 3
 
 [laptiming]
-Start +2000.0 +1000.0 +2001.0 +1001.0 ¬ Start/Finish
-Split +2100.0 +1100.0 +2101.0 +1101.0 ¬ Sector 1
+Start -1042.214520 +2921.328310 -1042.214520 +2921.301330 Start/Finish
+Split -1042.281770 +2921.360280 -1042.281770 +2921.333300 Split 1
+
+[avi]
+session_
+MP4
 
 [circuit details]
 country United States

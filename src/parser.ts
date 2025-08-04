@@ -26,13 +26,16 @@ export class VBOParser {
     'heading': 'heading',
     'height': 'height',
     'vert-vel': 'verticalVelocity',
+    'vertvel': 'verticalVelocity', // Common abbreviation in column names
     'vertical velocity m/s': 'verticalVelocity', // Exact match from VBO
+    'vertical velocity kmh': 'verticalVelocity', // Older VBOX devices
     'Tsample': 'samplePeriod',
     'sampleperiod': 'samplePeriod', // Exact match from VBO
     'solution_type': 'solutionType',
     'solution type': 'solutionType', // Exact match from VBO
     'avifileindex': 'aviFileIndex',
     'avisynctime': 'aviSyncTime',
+    'avitime': 'aviSyncTime', // Older alias for aviSyncTime
     'ComboAcc': 'comboAcc',
     'TC_Slip': 'tcSlip',
     'TC_Gain': 'tcGain',
@@ -430,8 +433,24 @@ export class VBOParser {
 
     const sample = nonZeroPoints.slice(0, Math.min(100, nonZeroPoints.length));
 
-    // Check if values are too large for any GPS format (> 1000 suggests local coordinates)
-    const hasLargeValues = sample.some(p => Math.abs(p.latitude) > 1000 || Math.abs(p.longitude) > 1000);
+    // Check for NMEA format first (DDMM.MMMMM) before checking for large values
+    const couldBeNmea = sample.some(p => {
+      const latDegrees = Math.floor(Math.abs(p.latitude) / 100);
+      const latMinutes = Math.abs(p.latitude) - (latDegrees * 100);
+      const lonDegrees = Math.floor(Math.abs(p.longitude) / 100);
+      const lonMinutes = Math.abs(p.longitude) - (lonDegrees * 100);
+
+      return latDegrees <= 90 && latMinutes < 60 && lonDegrees <= 180 && lonMinutes < 60 &&
+             (Math.abs(p.latitude) > 100 || Math.abs(p.longitude) > 100);
+    });
+
+    if (couldBeNmea) {
+      return 'nmea';
+    }
+
+    // Check if values are too large for any GPS format (> 10000 suggests local coordinates)
+    // Increased threshold to avoid misidentifying large longitudes in minutes format
+    const hasLargeValues = sample.some(p => Math.abs(p.latitude) > 10000 || Math.abs(p.longitude) > 20000);
     if (hasLargeValues) {
       return 'local';
     }
@@ -453,20 +472,6 @@ export class VBOParser {
       return 'vbox_minutes';
     }
 
-    // Check for NMEA format (DDMM.MMMMM)
-    const couldBeNmea = sample.some(p => {
-      const latDegrees = Math.floor(Math.abs(p.latitude) / 100);
-      const latMinutes = Math.abs(p.latitude) - (latDegrees * 100);
-      const lonDegrees = Math.floor(Math.abs(p.longitude) / 100);
-      const lonMinutes = Math.abs(p.longitude) - (lonDegrees * 100);
-
-      return latDegrees <= 90 && latMinutes < 60 && lonDegrees <= 180 && lonMinutes < 60 &&
-             (Math.abs(p.latitude) > 1000 || Math.abs(p.longitude) > 1000);
-    });
-
-    if (couldBeNmea) {
-      return 'nmea';
-    }
 
     // Default to standard GPS decimal degrees
     return 'gps';
