@@ -319,6 +319,7 @@ describe('VBO Schemas', () => {
     test('should validate complete session data', () => {
       const validSession = {
         filePath: 'test.vbo',
+        videos: [],
         header: {
           creationDate: new Date('2023-12-15T14:30:25'),
           channels: [{ name: 'velocity', unit: 'kmh', index: 0 }],
@@ -339,7 +340,7 @@ describe('VBO Schemas', () => {
     test('should allow optional fields', () => {
       const sessionWithOptionals = {
         filePath: 'test.vbo',
-        videoPath: '/videos/test_0001.mp4',
+        videos: [{ filename: '/videos/test_0001.mp4', index: 1 }],
         header: {
           creationDate: new Date('2023-12-15T14:30:25'),
           channels: [{ name: 'velocity', unit: 'kmh', index: 0 }],
@@ -375,7 +376,9 @@ describe('VBO Schemas', () => {
       const result = VBOSessionSchema.safeParse(sessionWithOptionals);
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.videoPath).toBe('/videos/test_0001.mp4');
+        expect(result.data.videos).toHaveLength(1);
+        expect(result.data.videos[0].filename).toBe('/videos/test_0001.mp4');
+        expect(result.data.videos[0].index).toBe(1);
         expect(result.data.trackLength).toBe(3000);
         expect(result.data.fastestLap?.lapNumber).toBe(1);
       }

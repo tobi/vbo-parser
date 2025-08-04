@@ -18,6 +18,7 @@ export {
   VBODataPointSchema,
   VBOSectorSchema,
   VBOLapSchema,
+  VBOVideoFileSchema,
   VBOSessionSchema,
   
   // TypeScript types
@@ -27,6 +28,7 @@ export {
   type VBOLap,
   type VBOSector,
   type VBOSession,
+  type VBOVideoFile,
   type TrackPoint,
   type VBOParserOptions,
   type FileSystemFileHandle,
@@ -58,7 +60,7 @@ export const parseMultipleVBOFiles = (input: FileList | File[], options?: VBOPar
 };
 
 // Utility exports
-export const extractDriverFromFilename = VBOParser.extractDriverFromFilename;
+export const getVideoForDataPoint = VBOParser.getVideoForDataPoint;
 export const calculateDistance = VBOParser.calculateDistance;
 export const listVBOFiles = VBOParser.listVBOFiles;
 export const openFilePicker = VBOParser.openFilePicker;

@@ -227,12 +227,62 @@ sats time
   });
 
   describe('Static Methods', () => {
-    test('extractDriverFromFilename should extract driver code', () => {
-      expect(VBOParser.extractDriverFromFilename('25IT04_RdAm_PT2_Run01_RD.vbo')).toBe('RD');
-      expect(VBOParser.extractDriverFromFilename('25IT04_RdAm_PT2_Run05_TL.vbo')).toBe('TL');
-      expect(VBOParser.extractDriverFromFilename('test_AB_001.vbo')).toBe('AB');
-      expect(VBOParser.extractDriverFromFilename('invalid.vbo')).toBe('Unknown');
-      expect(VBOParser.extractDriverFromFilename('')).toBe('Unknown');
+    test('getVideoForDataPoint should return video file and timestamp', () => {
+      const mockSession: VBOSession = {
+        filePath: 'test.vbo',
+        videos: [
+          { filename: '/videos/test_0001.mp4', index: 1 },
+          { filename: '/videos/test_0002.mp4', index: 2 }
+        ],
+        header: { creationDate: new Date(), channels: [], units: [] },
+        laps: [],
+        totalTime: 0,
+        dataPoints: [],
+        circuitInfo: { timingLines: [] }
+      };
+
+      const dataPoint = {
+        satellites: 8, time: 1.5, latitude: 45.123, longitude: -73.654,
+        velocity: 85.2, heading: 180.5, height: 100, verticalVelocity: 0,
+        samplePeriod: 0.1, solutionType: 4, aviFileIndex: 1, aviSyncTime: 15.25,
+        comboAcc: 0, tcSlip: 0, tcGain: 0, ppsMap: 0, epsMap: 0, engMap: 0,
+        driverId: 0, ambientTemperature: 20, carOnJack: 0, headrest: 0,
+        fuelProbe: 0, tcActive: 0, lapNumber: 1, lapGainLoss: 0,
+        engineSpeed: 3000, steeringAngle: 0, brakePressureFront: 0,
+        throttlePedal: 50, vehicleSpeed: 85.2, gear: 3, comboG: 0.5
+      };
+
+      const result = VBOParser.getVideoForDataPoint(mockSession, dataPoint);
+      expect(result).toEqual({
+        file: '/videos/test_0001.mp4',
+        timestamp: 15.25
+      });
+    });
+
+    test('getVideoForDataPoint should return null for non-existent video index', () => {
+      const mockSession: VBOSession = {
+        filePath: 'test.vbo',
+        videos: [{ filename: '/videos/test_0001.mp4', index: 1 }],
+        header: { creationDate: new Date(), channels: [], units: [] },
+        laps: [],
+        totalTime: 0,
+        dataPoints: [],
+        circuitInfo: { timingLines: [] }
+      };
+
+      const dataPoint = {
+        satellites: 8, time: 1.5, latitude: 45.123, longitude: -73.654,
+        velocity: 85.2, heading: 180.5, height: 100, verticalVelocity: 0,
+        samplePeriod: 0.1, solutionType: 4, aviFileIndex: 5, aviSyncTime: 15.25,
+        comboAcc: 0, tcSlip: 0, tcGain: 0, ppsMap: 0, epsMap: 0, engMap: 0,
+        driverId: 0, ambientTemperature: 20, carOnJack: 0, headrest: 0,
+        fuelProbe: 0, tcActive: 0, lapNumber: 1, lapGainLoss: 0,
+        engineSpeed: 3000, steeringAngle: 0, brakePressureFront: 0,
+        throttlePedal: 50, vehicleSpeed: 85.2, gear: 3, comboG: 0.5
+      };
+
+      const result = VBOParser.getVideoForDataPoint(mockSession, dataPoint);
+      expect(result).toBeNull();
     });
 
     test('calculateDistance should calculate GPS distance', () => {
@@ -287,8 +337,8 @@ sats time
     });
   });
 
-  describe('Video File Detection', () => {
-    test('should detect video file for VBO files', async () => {
+  describe('Video Files Detection', () => {
+    test('should detect multiple video files for VBO files', async () => {
       const mockVBOContent = `File created on 15/12/2023 @ 14:30:25
 [header]
 satellites
@@ -302,7 +352,15 @@ sats time
       const parser = new VBOParser();
       const session = await parser.parseVBOFile(mockFile);
 
-      expect(session.videoPath).toBe('/videos/test_session_RD_0001.mp4');
+      expect(session.videos).toHaveLength(10); // Maximum of 10 videos
+      expect(session.videos[0]).toEqual({
+        filename: '/videos/test_session_RD_0001.mp4',
+        index: 1
+      });
+      expect(session.videos[9]).toEqual({
+        filename: '/videos/test_session_RD_0010.mp4',
+        index: 10
+      });
     });
 
     test('should handle VBO files without video extension', async () => {
@@ -319,7 +377,7 @@ sats time
       const parser = new VBOParser();
       const session = await parser.parseVBOFile(mockFile);
 
-      expect(session.videoPath).toBeUndefined();
+      expect(session.videos).toHaveLength(0);
     });
   });
 

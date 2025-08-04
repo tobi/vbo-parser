@@ -94,9 +94,14 @@ export const VBOCircuitInfoSchema = z.object({
   timingLines: z.array(VBOTimingLineSchema),
 });
 
+export const VBOVideoFileSchema = z.object({
+  filename: z.string(),
+  index: z.number(),
+});
+
 export const VBOSessionSchema = z.object({
   filePath: z.string(),
-  videoPath: z.string().optional(),
+  videos: z.array(VBOVideoFileSchema),
   header: VBOHeaderSchema,
   laps: z.array(VBOLapSchema),
   fastestLap: VBOLapSchema.optional(),
@@ -114,6 +119,7 @@ export type VBOLap = z.infer<typeof VBOLapSchema>;
 export type VBOSector = z.infer<typeof VBOSectorSchema>;
 export type VBOTimingLine = z.infer<typeof VBOTimingLineSchema>;
 export type VBOCircuitInfo = z.infer<typeof VBOCircuitInfoSchema>;
+export type VBOVideoFile = z.infer<typeof VBOVideoFileSchema>;
 export type VBOSession = z.infer<typeof VBOSessionSchema>;
 
 // Utility types

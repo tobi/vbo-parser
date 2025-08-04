@@ -16,11 +16,11 @@ A comprehensive TypeScript library for parsing and analyzing VBO (Vehicle Bus Ob
 ## Installation
 
 ```bash
-npm install @vbo-parser/core@git+https://github.com/tobi/vbo-parser
+npm install '@vbo-parser/core@git+https://github.com/tobi/vbo-parser'
 # or
-yarn add @vbo-parser/core@git+https://github.com/tobi/vbo-parser
+yarn add '@vbo-parser/core@git+https://github.com/tobi/vbo-parser'
 # or
-bun add @vbo-parser/core@git+https://github.com/tobi/vbo-parser
+bun add '@vbo-parser/core@git+https://github.com/tobi/vbo-parser'
 ```
 
 ## Quick Start
@@ -43,6 +43,13 @@ console.log(`Total time: ${session.totalTime}s`);
 console.log(`Laps: ${laps.length}`);
 console.log(`Fastest lap: ${fastestLap?.lapTime}s`);
 ```
+
+## 📚 Documentation
+
+- **[📖 Complete Documentation](DOCUMENTATION.md)** - Comprehensive documentation and advanced usage
+- **[🔧 API Reference](API.md)** - Detailed API documentation
+- **[📋 VBO Format Specification](VBO_FORMAT.md)** - Complete VBO file format documentation
+- **[🧪 Testing Guide](TESTING.md)** - Testing and debugging information
 
 ## API Reference
 
@@ -72,7 +79,7 @@ const sessions = await parser.parseVBOFromInput(fileList);
 ```typescript
 interface VBOSession {
   filePath: string;
-  videoPath?: string;           // Associated video file path
+  videos: VBOVideoFile[];       // Associated video files
   header: VBOHeader;
   dataPoints: VBODataPoint[];
   laps: VBOLap[];
@@ -147,8 +154,9 @@ const vboFiles = await VBOParser.listVBOFiles(directoryHandle);
 ### Utility Functions
 
 ```typescript
-// Extract driver code from filename
-const driver = VBOParser.extractDriverFromFilename('session_RD_001.vbo'); // "RD"
+// Get video file and timestamp for a data point
+const videoInfo = VBOParser.getVideoForDataPoint(session, dataPoint);
+// Returns: { file: '/videos/filename_0001.mp4', timestamp: 15.25 } or null
 
 // Calculate GPS distance
 const distance = VBOParser.calculateDistance(lat1, lng1, lat2, lng2);

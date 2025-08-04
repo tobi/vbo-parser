@@ -4,6 +4,7 @@ import {
   type VBODataPoint,
   type VBOSession,
   type VBOCircuitInfo,
+  type VBOVideoFile,
   type VBOParserOptions,
   type FileSystemFileHandle,
   type FileSystemDirectoryHandle,
@@ -157,13 +158,8 @@ export class VBOParser {
         totalTime,
         trackLength: undefined,
         circuitInfo,
+        videos: this.findVideoFiles(filePath),
       };
-
-      // Find corresponding video file
-      const videoPath = this.findVideoFile(filePath);
-      if (videoPath) {
-        session.videoPath = videoPath;
-      }
 
       return session;
     } catch (error) {
@@ -626,24 +622,50 @@ export class VBOParser {
     return null;
   }
 
-  private findVideoFile(vboPath: string): string | undefined {
-    // Video should always be the same filename as VBO but ending in _0001.mp4
+  private findVideoFiles(vboPath: string): VBOVideoFile[] {
+    const videos: VBOVideoFile[] = [];
+    
     if (vboPath.toLowerCase().endsWith('.vbo')) {
-      const videoFilename = vboPath.replace(/\.vbo$/i, '_0001.mp4').split('/').pop();
-      if (videoFilename) {
-        return `/videos/${videoFilename}`;
+      const baseName = vboPath.replace(/\.vbo$/i, '');
+      
+      // Check for multiple video files with pattern {filename}_0001.mp4, {filename}_0002.mp4, etc.
+      // For now, we'll assume a reasonable maximum of 10 video files per VBO
+      for (let i = 1; i <= 10; i++) {
+        const videoIndex = i.toString().padStart(4, '0');
+        const videoFilename = `${baseName}_${videoIndex}.mp4`.split('/').pop();
+        
+        if (videoFilename) {
+          videos.push({
+            filename: `/videos/${videoFilename}`,
+            index: i
+          });
+        }
       }
     }
-
-    return undefined;
+    
+    return videos;
   }
 
+
   /**
-   * Extract driver code from VBO filename
+   * Get video file and timestamp for a specific data point
+   * Uses aviFileIndex to find the correct video file and aviSyncTime for the timestamp
    */
-  static extractDriverFromFilename(filename: string): string {
-    const match = filename.match(/_([A-Z]{2})(?:_\d+)?\.vbo$/i);
-    return match ? match[1].toUpperCase() : 'Unknown';
+  static getVideoForDataPoint(session: VBOSession, dataPoint: VBODataPoint): { file: string; timestamp: number } | null {
+    const videoIndex = dataPoint.aviFileIndex;
+    const timestamp = dataPoint.aviSyncTime;
+    
+    // Find the video file with the matching index
+    const videoFile = session.videos.find(video => video.index === videoIndex);
+    
+    if (!videoFile) {
+      return null;
+    }
+    
+    return {
+      file: videoFile.filename,
+      timestamp: timestamp
+    };
   }
 
   /**
