@@ -16,11 +16,11 @@ A comprehensive TypeScript library for parsing and analyzing VBO (Vehicle Bus Ob
 ## Installation
 
 ```bash
-npm install @vbo-parser/core
+npm install @vbo-parser/core@git+https://github.com/tobi/vbo-parser
 # or
-yarn add @vbo-parser/core
+yarn add @vbo-parser/core@git+https://github.com/tobi/vbo-parser
 # or
-bun add @vbo-parser/core
+bun add @vbo-parser/core@git+https://github.com/tobi/vbo-parser
 ```
 
 ## Quick Start
