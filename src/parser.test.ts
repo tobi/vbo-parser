@@ -54,7 +54,8 @@ sats time lat long velocity heading
       expect(session.filePath).toBe('unknown.vbo');
       expect(session.header.channels).toHaveLength(6);
       expect(session.dataPoints).toHaveLength(3);
-      expect(session.totalTime).toBe(2.5);
+      // Total time is now calculated after normalization (last point time - first point time)
+      expect(session.totalTime).toBe(1.0); // 2.5 - 1.5 = 1.0
       expect(session.dataPoints[0].satellites).toBe(8);
       expect(session.dataPoints[0].latitude).toBe(45.123456);
       expect(session.dataPoints[2].velocity).toBe(78.9);
@@ -345,6 +346,10 @@ satellites
 time
 [column names]
 sats time
+[AVI]
+test_session_RD_
+mp4
+mp4
 [data]
 8 1.5`;
 
@@ -352,14 +357,14 @@ sats time
       const parser = new VBOParser();
       const session = await parser.parseVBOFile(mockFile);
 
-      expect(session.videos).toHaveLength(10); // Maximum of 10 videos
+      expect(session.videos).toHaveLength(2); // 2 cameras as per AVI section
       expect(session.videos[0]).toEqual({
         filename: '/videos/test_session_RD_0001.mp4',
         index: 1
       });
-      expect(session.videos[9]).toEqual({
-        filename: '/videos/test_session_RD_0010.mp4',
-        index: 10
+      expect(session.videos[1]).toEqual({
+        filename: '/videos/test_session_RD_0002.mp4',
+        index: 2
       });
     });
 
