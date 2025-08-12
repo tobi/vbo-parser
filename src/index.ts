@@ -59,8 +59,12 @@ export const parseMultipleVBOFiles = (input: FileList | File[], options?: VBOPar
   return parser.parseVBOFromInput(input);
 };
 
-// Utility exports
+// Video seeking utilities
 export const getVideoForDataPoint = VBOParser.getVideoForDataPoint;
+export const getVideoForSessionTime = VBOParser.getVideoForSessionTime;
+export const getVideoSegments = VBOParser.getVideoSegments;
+
+// Utility exports
 export const calculateDistance = VBOParser.calculateDistance;
 export const listVBOFiles = VBOParser.listVBOFiles;
 export const openFilePicker = VBOParser.openFilePicker;

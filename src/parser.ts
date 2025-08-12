@@ -137,21 +137,20 @@ export class VBOParser {
         throw new VBOParseError('No data points found in VBO file');
       }
 
-      // Calculate total time before normalization
-      let totalTime = 0;
-      if (rawDataPoints.length > 0) {
-        for (let i = 0; i < rawDataPoints.length; i++) {
-          if (rawDataPoints[i].time > totalTime) {
-            totalTime = rawDataPoints[i].time;
-          }
-        }
-      }
-
-      // Normalize data points
+      // Normalize data points first
       const dataPoints = this.normalizeDataPoints(rawDataPoints);
+
+      // Calculate total time after normalization
+      let totalTime = 0;
+      if (dataPoints.length > 0) {
+        totalTime = dataPoints[dataPoints.length - 1].time;
+      }
 
       // Parse circuit info and timing lines
       const circuitInfo = this.parseCircuitInfo(content);
+      
+      // Parse video files from AVI section
+      const videos = this.parseVideoFiles(content);
 
       const session: VBOSession = {
         filePath,
@@ -161,7 +160,7 @@ export class VBOParser {
         totalTime,
         trackLength: undefined,
         circuitInfo,
-        videos: this.findVideoFiles(filePath),
+        videos,
       };
 
       return session;
@@ -434,13 +433,19 @@ export class VBOParser {
     const sample = nonZeroPoints.slice(0, Math.min(100, nonZeroPoints.length));
 
     // Check for NMEA format first (DDMM.MMMMM) before checking for large values
+    // Note: Some VBO files have minutes > 60, which is actually total minutes format
     const couldBeNmea = sample.some(p => {
       const latDegrees = Math.floor(Math.abs(p.latitude) / 100);
-      const latMinutes = Math.abs(p.latitude) - (latDegrees * 100);
+      const latMinutes = Math.abs(p.latitude) % 100;
       const lonDegrees = Math.floor(Math.abs(p.longitude) / 100);
-      const lonMinutes = Math.abs(p.longitude) - (lonDegrees * 100);
+      const lonMinutes = Math.abs(p.longitude) % 100;
 
-      return latDegrees <= 90 && latMinutes < 60 && lonDegrees <= 180 && lonMinutes < 60 &&
+      // Standard NMEA has minutes < 60
+      // But some VBO files use total minutes (can be > 60)
+      const isStandardNmea = latDegrees <= 90 && latMinutes < 60 && lonDegrees <= 180 && lonMinutes < 60;
+      const isTotalMinutesFormat = latDegrees <= 90 && lonDegrees <= 180;
+
+      return (isStandardNmea || isTotalMinutesFormat) && 
              (Math.abs(p.latitude) > 100 || Math.abs(p.longitude) > 100);
     });
 
@@ -580,12 +585,24 @@ export class VBOParser {
 
   /**
    * Convert NMEA coordinates (DDMM.MMMMM) to decimal degrees
+   * Note: Some VBO files have minutes > 60, which means total minutes format
    */
   private nmeaToDecimal(nmeaCoord: number): number {
     if (nmeaCoord === 0) return 0;
 
     const degrees = Math.floor(Math.abs(nmeaCoord) / 100);
     const minutes = Math.abs(nmeaCoord) % 100;
+    
+    // If minutes >= 60, this is actually total minutes format
+    // Convert the entire value as total minutes
+    if (minutes >= 60) {
+      // Total minutes format: treat the whole number as minutes
+      const totalMinutes = Math.abs(nmeaCoord);
+      const decimal = totalMinutes / 60;
+      return nmeaCoord < 0 ? -decimal : decimal;
+    }
+    
+    // Standard NMEA format
     const decimal = degrees + (minutes / 60);
 
     // Preserve sign
@@ -627,6 +644,60 @@ export class VBOParser {
     return null;
   }
 
+  /**
+   * Parse video files from the [AVI] section of VBO content
+   */
+  private parseVideoFiles(content: string): VBOVideoFile[] {
+    const videos: VBOVideoFile[] = [];
+    const lines = content.split(/\r?\n/);
+    
+    const aviIndex = lines.findIndex(line => line.trim() === '[AVI]');
+    if (aviIndex === -1) {
+      return videos;
+    }
+    
+    // Parse AVI section
+    // Format:
+    // [AVI]
+    // basename_
+    // format1 (e.g., mp4)
+    // format2 (e.g., mp4)
+    // ...
+    
+    let baseName = '';
+    const formats: string[] = [];
+    
+    for (let i = aviIndex + 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      
+      // Stop at next section or empty lines
+      if (line === '' || line.startsWith('[')) {
+        break;
+      }
+      
+      // First line after [AVI] is the base filename
+      if (i === aviIndex + 1) {
+        baseName = line;
+      } else {
+        // Subsequent lines are video formats
+        formats.push(line);
+      }
+    }
+    
+    // Create video entries for each format found
+    formats.forEach((format, index) => {
+      if (format && format !== '(null)') {
+        const videoIndex = (index + 1).toString().padStart(4, '0');
+        videos.push({
+          filename: `/videos/${baseName}${videoIndex}.${format}`,
+          index: index + 1
+        });
+      }
+    });
+    
+    return videos;
+  }
+
   private findVideoFiles(vboPath: string): VBOVideoFile[] {
     const videos: VBOVideoFile[] = [];
     
@@ -655,10 +726,17 @@ export class VBOParser {
   /**
    * Get video file and timestamp for a specific data point
    * Uses aviFileIndex to find the correct video file and aviSyncTime for the timestamp
+   * 
+   * @returns Object with file path and timestamp in milliseconds, or null if no video
    */
   static getVideoForDataPoint(session: VBOSession, dataPoint: VBODataPoint): { file: string; timestamp: number } | null {
     const videoIndex = dataPoint.aviFileIndex;
     const timestamp = dataPoint.aviSyncTime;
+    
+    // aviFileIndex of 0 typically means no video
+    if (videoIndex === 0) {
+      return null;
+    }
     
     // Find the video file with the matching index
     const videoFile = session.videos.find(video => video.index === videoIndex);
@@ -671,6 +749,102 @@ export class VBOParser {
       file: videoFile.filename,
       timestamp: timestamp
     };
+  }
+
+  /**
+   * Get video file and timestamp for a specific session time
+   * Finds the data point closest to the given time and returns its video info
+   * 
+   * @param sessionTime Time in seconds since session start
+   * @returns Object with file path and timestamp in milliseconds, or null if no video
+   */
+  static getVideoForSessionTime(session: VBOSession, sessionTime: number): { file: string; timestamp: number } | null {
+    if (session.dataPoints.length === 0) {
+      return null;
+    }
+    
+    // Find the closest data point to the requested time
+    let closestPoint = session.dataPoints[0];
+    let minDiff = Math.abs(closestPoint.time - sessionTime);
+    
+    for (const point of session.dataPoints) {
+      const diff = Math.abs(point.time - sessionTime);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closestPoint = point;
+      }
+      // If we've passed the time and differences are increasing, stop
+      if (point.time > sessionTime && diff > minDiff) {
+        break;
+      }
+    }
+    
+    return this.getVideoForDataPoint(session, closestPoint);
+  }
+
+  /**
+   * Get all video segments for the session
+   * Returns an array of video segments with their time ranges
+   * 
+   * @returns Array of video segments with file, start/end times, and data point indices
+   */
+  static getVideoSegments(session: VBOSession): Array<{
+    file: string;
+    index: number;
+    startTime: number;
+    endTime: number;
+    startDataPointIndex: number;
+    endDataPointIndex: number;
+  }> {
+    const segments: Array<{
+      file: string;
+      index: number;
+      startTime: number;
+      endTime: number;
+      startDataPointIndex: number;
+      endDataPointIndex: number;
+    }> = [];
+    
+    if (session.dataPoints.length === 0 || session.videos.length === 0) {
+      return segments;
+    }
+    
+    let currentVideoIndex = -1;
+    let currentSegment: any = null;
+    
+    session.dataPoints.forEach((point, dataIndex) => {
+      if (point.aviFileIndex > 0 && point.aviFileIndex !== currentVideoIndex) {
+        // Save previous segment if exists
+        if (currentSegment) {
+          currentSegment.endTime = session.dataPoints[dataIndex - 1].time;
+          currentSegment.endDataPointIndex = dataIndex - 1;
+          segments.push(currentSegment);
+        }
+        
+        // Start new segment
+        const video = session.videos.find(v => v.index === point.aviFileIndex);
+        if (video) {
+          currentVideoIndex = point.aviFileIndex;
+          currentSegment = {
+            file: video.filename,
+            index: video.index,
+            startTime: point.time,
+            endTime: point.time, // Will be updated
+            startDataPointIndex: dataIndex,
+            endDataPointIndex: dataIndex // Will be updated
+          };
+        }
+      }
+    });
+    
+    // Save last segment
+    if (currentSegment) {
+      currentSegment.endTime = session.dataPoints[session.dataPoints.length - 1].time;
+      currentSegment.endDataPointIndex = session.dataPoints.length - 1;
+      segments.push(currentSegment);
+    }
+    
+    return segments;
   }
 
   /**

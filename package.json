@@ -55,7 +55,7 @@
   },
   "homepage": "https://github.com/vbo-parser/core#readme",
   "dependencies": {
-    "zod": "^3.22.0"
+    "zod": "^4.0.17"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
