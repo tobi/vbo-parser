@@ -6,6 +6,14 @@ import type { VBOParserOptions } from './types';
 // Main parser class
 export { VBOParser } from './parser';
 
+// Session comparison and synchronization
+export { SessionComparison } from './session-comparison';
+export type { 
+  NormalizedPosition,
+  SessionComparisonOptions,
+  SessionState 
+} from './session-comparison';
+
 // Lap detection utilities
 export { LapDetection } from './lap-detection';
 export type { LapDetectionOptions } from './lap-detection';
