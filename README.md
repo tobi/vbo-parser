@@ -7,6 +7,7 @@ A comprehensive TypeScript library for parsing and analyzing VBO (Vehicle Bus Ob
 - 🏎️ **Complete VBO file parsing** - Parse motorsport telemetry data from VBO files
 - 🔄 **Automatic lap detection** - Smart lap detection using GPS data or existing lap markers
 - 📊 **Sector analysis** - Automatically generate sector times and analysis
+- 🔁 **Session comparison** - Synchronize and compare multiple racing sessions
 - 🎯 **Type-safe** - Full TypeScript support with Zod validation
 - 🌐 **Browser & Node.js** - Works in both browser and server environments
 - 📱 **File System Access API** - Modern browser file picking support
@@ -113,6 +114,44 @@ interface VBOLap {
   dataPoints: VBODataPoint[];
   isValid: boolean;
 }
+```
+
+### Session Comparison
+
+Synchronize and compare multiple racing sessions for detailed analysis.
+
+```typescript
+import { SessionComparison } from '@vbo-parser/core';
+
+// Create a comparison between multiple sessions
+const comparison = new SessionComparison(
+  mainSession,                    // Primary session to control navigation
+  [session2, session3],           // Sessions to compare against
+  {
+    progressTolerance: 0.01,      // Progress matching tolerance (1% of lap)
+    allowDifferentTracks: false   // Only compare same track sessions
+  }
+);
+
+// Navigate through sessions in sync
+comparison.jumpToLap(2);           // Jump to specific lap
+comparison.advanceMain(50);        // Move forward by data points
+comparison.rewindMain(10);         // Move backward
+comparison.setMainProgress(0.5);   // Jump to 50% through session
+
+// Get synchronized data from all sessions
+const syncedData = comparison.getSynchronizedDataPoints();
+console.log('Main speed:', syncedData.main.velocity);
+console.log('Comparator speeds:', syncedData.comparators.map(d => d?.velocity));
+
+// Get comparison summary with time deltas
+const summary = comparison.getSummary();
+summary.comparators.forEach(comp => {
+  console.log(`Delta: ${comp.delta}s, Speed: ${comp.speed} km/h`);
+});
+
+// Find closest point in another session
+const closest = comparison.findClosestToSession(targetSession, sourceSession, dataPointIndex);
 ```
 
 ### Lap Detection
